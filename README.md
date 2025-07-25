@@ -288,7 +288,7 @@ This project is created as an iOS Developer Test demonstration and is available 
 
 ## 🙋‍♂️ Developer Notes
 
-**Created by**: Professional iOS Developer  
+**Created by**: Ben Chukwuma (iOS Developer) 
 **Development Time**: Comprehensive implementation  
 **Code Quality**: Production-ready standard  
 **Architecture**: Enterprise-level MVVM with Combine  

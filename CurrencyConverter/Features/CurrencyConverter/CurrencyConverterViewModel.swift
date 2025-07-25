@@ -157,17 +157,12 @@ class CurrencyConverterViewModel: ObservableObject {
     
     // MARK: - Persistence
     private func loadUserPreferences() {
-        if let data = UserDefaults.standard.data(forKey: "UserPreferences"),
-           let preferences = try? JSONDecoder().decode(UserPreferences.self, from: data) {
-            
-            if let fromCurrency = CurrencyData.currency(for: preferences.defaultFromCurrency) {
-                self.fromCurrency = fromCurrency
-            }
-            
-            if let toCurrency = CurrencyData.currency(for: preferences.defaultToCurrency) {
-                self.toCurrency = toCurrency
-            }
-        }
+        // Clear old preferences and always start with EUR base for Fixer.io free plan compatibility
+        UserDefaults.standard.removeObject(forKey: "UserPreferences")
+        
+        // Always use EUR as base currency for Fixer.io free plan
+        self.fromCurrency = CurrencyData.currency(for: "EUR") ?? Currency(code: "EUR", name: "Euro", flag: "🇪🇺")
+        self.toCurrency = CurrencyData.currency(for: "PLN") ?? Currency(code: "PLN", name: "Polish Zloty", flag: "🇵🇱")
         
         loadConversionHistory()
     }

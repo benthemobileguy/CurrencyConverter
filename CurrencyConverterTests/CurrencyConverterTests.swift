@@ -2,6 +2,7 @@ import XCTest
 import Combine
 @testable import CurrencyConverter
 
+@MainActor
 final class CurrencyConverterTests: XCTestCase {
     
     var viewModel: CurrencyConverterViewModel!
@@ -54,7 +55,7 @@ final class CurrencyConverterTests: XCTestCase {
     func testConversionSuccess() async {
         let expectation = XCTestExpectation(description: "Conversion completed")
         
-        viewModel.$convertedAmount
+        await viewModel.$convertedAmount
             .dropFirst()
             .sink { amount in
                 if amount != nil {
@@ -69,7 +70,9 @@ final class CurrencyConverterTests: XCTestCase {
         
         XCTAssertNotNil(viewModel.convertedAmount)
         XCTAssertNotNil(viewModel.exchangeRate)
-        XCTAssertEqual(viewModel.convertedAmount, 456.78, accuracy: 0.01)
+        if let convertedAmount = viewModel.convertedAmount {
+            XCTAssertEqual(convertedAmount, 456.78, accuracy: 0.01)
+        }
     }
     
     func testConversionError() async {
@@ -77,7 +80,7 @@ final class CurrencyConverterTests: XCTestCase {
         
         let expectation = XCTestExpectation(description: "Error received")
         
-        viewModel.$errorMessage
+        await viewModel.$errorMessage
             .dropFirst()
             .sink { errorMessage in
                 if errorMessage != nil {
@@ -99,7 +102,7 @@ final class CurrencyConverterTests: XCTestCase {
         
         var loadingStates: [Bool] = []
         
-        viewModel.$isLoading
+        await viewModel.$isLoading
             .sink { isLoading in
                 loadingStates.append(isLoading)
                 if loadingStates.count >= 2 {
@@ -292,7 +295,7 @@ final class CurrencyConverterTests: XCTestCase {
         // Perform conversion
         let expectation = XCTestExpectation(description: "Full conversion flow")
         
-        viewModel.$convertedAmount
+        await viewModel.$convertedAmount
             .dropFirst()
             .sink { amount in
                 if amount != nil {
@@ -310,5 +313,33 @@ final class CurrencyConverterTests: XCTestCase {
         XCTAssertNotNil(viewModel.lastUpdated)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.errorMessage)
+    }
+}
+
+// MARK: - Extensions
+
+extension Publisher {
+    func async() async throws -> Output {
+        try await withCheckedThrowingContinuation { continuation in
+            var cancellable: AnyCancellable?
+            
+            cancellable = self
+                .first()
+                .sink(
+                    receiveCompletion: { completion in
+                        switch completion {
+                        case .finished:
+                            break
+                        case .failure(let error):
+                            continuation.resume(throwing: error)
+                        }
+                        cancellable?.cancel()
+                    },
+                    receiveValue: { value in
+                        continuation.resume(returning: value)
+                        cancellable?.cancel()
+                    }
+                )
+        }
     }
 }

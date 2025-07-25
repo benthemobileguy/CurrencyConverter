@@ -14,14 +14,21 @@ struct Currency: Codable, Equatable, Hashable {
 
 struct ExchangeRateResponse: Codable {
     let success: Bool
-    let timestamp: Int
-    let base: String
-    let date: String
-    let rates: [String: Double]
+    let timestamp: Int?
+    let base: String?
+    let date: String?
+    let rates: [String: Double]?
+    let error: APIError?
     
     enum CodingKeys: String, CodingKey {
-        case success, timestamp, base, date, rates
+        case success, timestamp, base, date, rates, error
     }
+}
+
+struct APIError: Codable {
+    let code: Int
+    let type: String
+    let info: String?
 }
 
 struct ConversionResult {

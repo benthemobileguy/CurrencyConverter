@@ -101,9 +101,12 @@ The app launches immediately with:
 
 #### Unit Tests
 ```bash
-# Command line
+# Command line - All tests
 cd "/Users/apple/iOS Projects/CurrencyConverter"
 xcodebuild test -project CurrencyConverter.xcodeproj -scheme CurrencyConverter -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+
+# Command line - Unit tests only
+xcodebuild test -project CurrencyConverter.xcodeproj -scheme CurrencyConverter -destination 'platform=iOS Simulator,name=iPhone 16 Pro' -only-testing:CurrencyConverterTests
 
 # Or in Xcode
 ⌘ + U

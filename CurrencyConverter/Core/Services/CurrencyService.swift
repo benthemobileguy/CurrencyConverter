@@ -9,7 +9,7 @@ protocol CurrencyServiceProtocol {
 
 class CurrencyService: CurrencyServiceProtocol {
     private let apiKey = "cd648d156cf07c5e0e55d275da65fc70"
-    private let baseURL = "https://api.fixer.io/v1"
+    private let baseURL = "https://data.fixer.io/api"
     private let session = URLSession.shared
     private var cancellables = Set<AnyCancellable>()
     
@@ -19,14 +19,17 @@ class CurrencyService: CurrencyServiceProtocol {
     private let cacheValidityDuration: TimeInterval = 300 // 5 minutes
     
     func getExchangeRates(base: String) -> AnyPublisher<ExchangeRateResponse, CurrencyError> {
+        // Fixer.io free plan only supports EUR as base currency
+        let actualBase = "EUR"
+        
         // Check cache first
-        if let cachedResponse = getCachedRates(for: base) {
+        if let cachedResponse = getCachedRates(for: actualBase) {
             return Just(cachedResponse)
                 .setFailureType(to: CurrencyError.self)
                 .eraseToAnyPublisher()
         }
         
-        guard let url = buildURL(endpoint: "latest", base: base) else {
+        guard let url = buildURL(endpoint: "latest", base: actualBase) else {
             return Fail(error: CurrencyError.networkError("Invalid URL"))
                 .eraseToAnyPublisher()
         }
@@ -34,15 +37,36 @@ class CurrencyService: CurrencyServiceProtocol {
         return session.dataTaskPublisher(for: url)
             .map(\.data)
             .decode(type: ExchangeRateResponse.self, decoder: JSONDecoder())
+            .tryMap { response in
+                if !response.success {
+                    let errorMessage = response.error?.type ?? "Unknown API error"
+                    throw CurrencyError.apiError("API Error: \(errorMessage)")
+                }
+                
+                guard let rates = response.rates else {
+                    throw CurrencyError.apiError("No exchange rates in response")
+                }
+                
+                return ExchangeRateResponse(
+                    success: true,
+                    timestamp: response.timestamp,
+                    base: response.base,
+                    date: response.date,
+                    rates: rates,
+                    error: nil
+                )
+            }
             .mapError { error in
-                if error is DecodingError {
-                    return CurrencyError.apiError("Failed to parse response")
+                if let currencyError = error as? CurrencyError {
+                    return currencyError
+                } else if let decodingError = error as? DecodingError {
+                    return CurrencyError.apiError("Failed to parse response: \(decodingError.localizedDescription)")
                 } else {
                     return CurrencyError.networkError(error.localizedDescription)
                 }
             }
             .handleEvents(receiveOutput: { [weak self] response in
-                self?.cacheRates(response, for: base)
+                self?.cacheRates(response, for: actualBase)
             })
             .eraseToAnyPublisher()
     }
@@ -53,24 +77,35 @@ class CurrencyService: CurrencyServiceProtocol {
                 .eraseToAnyPublisher()
         }
         
-        return getExchangeRates(base: from.code)
+        return getExchangeRates(base: "EUR")
             .tryMap { response in
                 guard response.success else {
                     throw CurrencyError.apiError("API request failed")
                 }
                 
-                guard let rate = response.rates[to.code] else {
+                guard let rates = response.rates else {
+                    throw CurrencyError.apiError("No rates available")
+                }
+                
+                // Handle EUR as from/to currency specially
+                let fromRate = from.code == "EUR" ? 1.0 : rates[from.code]
+                let toRate = to.code == "EUR" ? 1.0 : rates[to.code]
+                
+                guard let fromEurRate = fromRate, let toEurRate = toRate else {
                     throw CurrencyError.rateNotFound
                 }
                 
-                let convertedAmount = amount * rate
+                // Convert: amount in fromCurrency -> EUR -> toCurrency
+                let amountInEur = amount / fromEurRate
+                let convertedAmount = amountInEur * toEurRate
+                let directRate = toEurRate / fromEurRate
                 
                 return ConversionResult(
                     fromCurrency: from,
                     toCurrency: to,
                     fromAmount: amount,
                     toAmount: convertedAmount,
-                    rate: rate,
+                    rate: directRate,
                     timestamp: Date()
                 )
             }
@@ -152,7 +187,8 @@ class MockCurrencyService: CurrencyServiceProtocol {
             timestamp: Int(Date().timeIntervalSince1970),
             base: base,
             date: DateFormatter.apiDateFormatter.string(from: Date()),
-            rates: mockExchangeRates
+            rates: mockExchangeRates,
+            error: nil
         )
         
         return Just(response)
